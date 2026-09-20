@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#981b32">
+    <title>OpenC2 Producer · TFG</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/app.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#workspace">Ir al panel de trabajo</a>
+<header class="topbar">
+    <div class="topbar-inner">
+        <img class="university-logo" src="/universidad-sevilla.png" alt="Universidad de Sevilla" width="260" height="125">
+        <nav aria-label="Navegación principal"><a href="/" aria-current="page">Comandos</a><a href="/perfil">Normas del perfil</a></nav>
+
+    </div>
+</header>
+<main id="workspace">
+    <section class="hero" aria-labelledby="pageTitle">
+        <div>
+            <p class="eyebrow">ORQUESTACIÓN · AUTOMATIZACIÓN · RESPUESTA DE SEGURIDAD</p>
+            <h1 id="pageTitle">OpenC2 <span>Producer</span></h1>
+        </div>
+        <div class="hero-tag"><strong>TRABAJO FIN DE GRADO</strong></div>
+    </section>
+
+    <div class="workspace-grid command-workspace">
+        <div class="command-forms">
+        <form id="queries" class="card">
+            <div class="section-heading"><div><h2>Conexión y consultas</h2></div></div>
+
+            <label for="consumerUrl">Dirección del Consumer</label>
+            <input id="consumerUrl" name="consumerUrl" type="url" required value="http://localhost:8080" aria-describedby="urlHelp" spellcheck="false">
+            <p id="urlHelp" class="field-help">Sin ruta. Para otro equipo, por ejemplo: http://192.168.1.30:8080.</p>
+            <div class="query-list">
+                <button type="submit" value="capabilities" data-operation="capabilities" aria-pressed="false" formnovalidate class="query-button"><span><strong>Consultar capacidades</strong><small>Acciones y objetivos admitidos</small></span><span aria-hidden="true">↗</span></button>
+                <button type="submit" value="huntflows" data-operation="huntflows" aria-pressed="false" formnovalidate class="query-button"><span><strong>Consultar investigaciones</strong><small>Catálogo de huntflows, sin ejecución</small></span><span aria-hidden="true">↗</span></button>
+                <button type="submit" value="datasources" data-operation="datasources" aria-pressed="false" formnovalidate class="query-button"><span><strong>Consultar fuentes</strong><small>Definiciones de las fuentes de datos</small></span><span aria-hidden="true">↗</span></button>
+            </div>
+            <p class="information">Las fuentes son estáticas. No se comprueba la disponibilidad de equipos ni de Velociraptor.</p>
+        </form>
+
+        <form id="investigation" class="card">
+            <div class="section-heading"><div><h2>Petición de investigación</h2></div></div>
+            <div class="huntflow"><span>HUNTFLOW</span><code>userlogon</code><span class="badge">Solo validación</span></div>
+            <div class="notice"><strong>Ejecución pendiente</strong><p>El Consumer solo valida la petición. Una petición válida devuelve HTTP 501; no se ejecuta ninguna investigación.</p></div>
+            <label for="username">Nombre de usuario <span class="required">obligatorio</span></label>
+            <input id="username" name="username" required placeholder="Ej. ana" autocomplete="off" spellcheck="false">
+            <label for="vigilanceLevel">Nivel de vigilancia</label>
+            <select id="vigilanceLevel" name="vigilance_level">
+                <option value="">Omitir · STANDARD por defecto</option>
+                <option value="STANDARD">STANDARD</option>
+                <option value="SUSPICIOUS">SUSPICIOUS</option>
+                <option value="CRITICAL">CRITICAL</option>
+            </select>
+            <p class="field-help">Se utiliza la dirección del Consumer indicada en el panel de consultas.</p>
+            <button type="submit" data-operation="investigate" aria-pressed="false" class="primary-button">Preparar petición de investigación <span aria-hidden="true">→</span></button>
+        </form>
+        </div>
+        <aside class="card preview-card" aria-labelledby="previewTitle">
+            <p class="eyebrow">VISTA PREVIA</p>
+            <h2 id="previewTitle">Selecciona un comando</h2>
+            <p id="previewMessage" class="field-help" role="status" aria-live="polite">Los botones preparan el JSON. El envío se realiza por separado.</p>
+            <pre id="previewJson" aria-label="JSON del comando preparado"></pre>
+            <p class="field-help">El JSON lo genera Java con Lycan y la extensión TH del proyecto. Se muestra con sangría para facilitar la lectura.</p>
+            <button id="sendCommand" type="button" class="primary-button" disabled>Enviar al Consumer</button>
+            <p class="field-help">Para userlogon, el Consumer solo valida; no ejecuta la investigación.</p>
+            <a href="/perfil">Consultar las normas del perfil →</a>
+        </aside>
+    </div>
+
+    <section class="card result-card" aria-labelledby="resultsTitle">
+        <div class="section-heading"><div><h2 id="resultsTitle">Resultado de la petición</h2></div></div>
+        <p id="message" class="status-message" role="status" aria-live="polite">Prepara un comando, revisa su JSON y pulsa Enviar para ver la respuesta.</p>
+        <div id="result" hidden>
+            <div class="http-row"><h3>Estado HTTP del Consumer</h3><p id="httpStatus" class="http-status">Sin respuesta HTTP</p></div>
+            <div class="payload-grid">
+                <div class="payload"><div class="payload-heading"><h3>JSON de la petición</h3><span>ENVÍO</span></div><pre id="command"></pre></div>
+                <div class="payload"><div class="payload-heading"><h3>Respuesta recibida</h3><span>CONSUMER</span></div><pre id="response"></pre></div>
+            </div>
+        </div>
+    </section>
+    <footer><span>Universidad de Sevilla <span aria-hidden="true">/</span> Trabajo Fin de Grado</span><span>openc2producer</span></footer>
+</main>
+</body>
+</html>

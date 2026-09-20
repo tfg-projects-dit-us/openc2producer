@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Normas del perfil · OpenC2 Producer</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<a class="skip-link" href="#profile">Ir al contenido</a>
+<header class="topbar"><div class="topbar-inner">
+    <img class="university-logo" src="/universidad-sevilla.png" alt="Universidad de Sevilla" width="260" height="125">
+    <nav aria-label="Navegación principal"><a href="/">Comandos</a><a href="/perfil" aria-current="page">Normas del perfil</a></nav>
+</div></header>
+<main id="profile">
+    <section class="hero"><div><h1>Perfil <span>Threat Hunting</span></h1><p class="hero-description">Guía para entender los comandos y sus objetivos.</p></div></section>
+    <section class="card profile-section">
+        <h2>Referencia OASIS</h2>
+        <p>Guía basada en Threat Hunting AP 1.0, borrador CSD02 (21 de febrero de 2024).</p>
+        <p><a href="https://docs.oasis-open.org/openc2/ap-hunt/v1.0/csd02/ap-hunt-v1.0-csd02.html">Documento completo de OASIS</a>. Este resumen no sustituye la especificación.</p>
+        <h3>Cómo se forma un comando</h3>
+        <ul>
+            <li><code>action</code>: qué se solicita; query consulta información e investigate solicita una investigación.</li>
+            <li><code>target</code>: sobre qué se actúa.</li>
+            <li><code>args</code>: parámetros de la petición, cuando corresponda.</li>
+            <li><code>th</code>: identifica los elementos propios de Threat Hunting.</li>
+        </ul>
+        <h3>Qué buscamos con cada operación</h3>
+        <div class="table-scroll"><table>
+            <thead><tr><th>Acción</th><th>Objetivo</th><th>Propósito</th></tr></thead>
+            <tbody>
+                <tr><td>query</td><td>features</td><td>Descubrir capacidades; pairs devuelve las parejas acción/objetivo.</td></tr>
+                <tr><td>query</td><td>th.huntflows</td><td>Conocer los procedimientos de investigación disponibles.</td></tr>
+                <tr><td>query</td><td>th.datasources</td><td>Identificar fuentes de datos para investigar.</td></tr>
+                <tr><td>investigate</td><td>th.hunt</td><td>Solicitar una investigación mediante un huntflow seleccionado.</td></tr>
+            </tbody>
+        </table></div>
+        <h3>Ejemplo: descubrir capacidades</h3>
+        <pre>{
+  "action": "query",
+  "target": {
+    "features": ["pairs"]
+  }
+}</pre>
+        <p>En los objetivos específicos, th agrupa el objetivo: <code>target.th.hunt</code> identifica el huntflow. Los argumentos de investigación se sitúan en <code>args.th.huntargs</code>; pueden incluir cadenas, datos tipados, rangos temporales o fuentes.</p>
+        <p>La idea es descubrir primero capacidades, procedimientos y datos, y después preparar una investigación con sus argumentos. La respuesta permite comprobar el estado y consultar los resultados.</p>
+    </section>
+    <section class="card profile-section">
+        <h2>Actuator Profile desarrollado</h2>
+    </section>
+    <footer><span>Universidad de Sevilla / Trabajo Fin de Grado</span><a href="/">Volver a los comandos</a></footer>
+</main>
+</body>
+</html>
