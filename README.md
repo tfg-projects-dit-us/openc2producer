@@ -1,163 +1,322 @@
-# openc2producer
+# OpenC2 Producer
+
+Este proyecto proporciona las clases Java para crear comandos OpenC2, enviarlos a
+un Consumer y recibir sus respuestas. Utiliza la librería Lycan para representar
+los comandos, sus targets, sus argumentos y las respuestas.
+
+Actualmente es un componente que se utiliza desde otra aplicación Java: no tiene
+un `main`, una interfaz gráfica ni un servidor que arranque por sí solo.
+Crear un comando no lo envía. El envío se realiza al llamar a `sendCommand`.
+
+## Responsabilidad del Producer
+
+El Producer solicita operaciones al Consumer. Por ejemplo, puede preguntar qué
+huntflows hay disponibles o solicitar que se ejecute un hunt concreto.
+
+```text
+Producer ── comando OpenC2 ──→ Consumer
+Producer ←─ respuesta OpenC2 ── Consumer
+```
+
+Si el Consumer utiliza Velociraptor, es el Consumer quien traduce el comando a la
+operación correspondiente. El Producer no ejecuta hunts en Velociraptor y no
+tiene hunts concretos, como userlogon, incorporados en su código.
+
+En Java se trabaja con objetos de Lycan. Para enviarlos por la red, el Producer
+utiliza Lycan para convertirlos a JSON. Al recibir una respuesta, utiliza Lycan
+para convertir el JSON recibido en un objeto `OpenC2Response`.
+
+## Organización del proyecto
+
+Las clases principales están dentro de:
+
+```text
+src/main/java/us/dit/ueba/openc2producer/
+├── ConsumerConnection.java
+├── OpenC2Producer.java
+├── commands/
+│   └── OpenC2Commands.java
+└── profiles/
+    └── th/
+        └── ThreatHuntingCommands.java
+```
+
+| Archivo | Para qué sirve |
+| --- | --- |
+| `ConsumerConnection.java` | Guarda la IP, el puerto y la ruta HTTP del Consumer. |
+| `OpenC2Producer.java` | Envía comandos y lee las respuestas utilizando Lycan. |
+| `commands/OpenC2Commands.java` | Construye comandos generales y consultas `query features`. |
+| `profiles/th/ThreatHuntingCommands.java` | Construye los comandos específicos de Threat Hunting. |
+
+Esta separación permite distinguir los datos de conexión, la construcción de
+comandos y su envío. Lo común está separado de lo específico del perfil TH.
+Los modelos OpenC2 se reutilizan desde Lycan.
+
+## Ejemplo completo: consultar las capacidades del Consumer
+
+El siguiente ejemplo muestra cómo una aplicación puede utilizar estas clases.
+La IP y el puerto son ilustrativos: deben sustituirse por los del Consumer real.
+
+```java
+import java.io.IOException;
+import org.oasis.openc2.lycan.OpenC2Message;
+import org.oasis.openc2.lycan.OpenC2Response;
+import us.dit.ueba.openc2producer.ConsumerConnection;
+import us.dit.ueba.openc2producer.OpenC2Producer;
+import us.dit.ueba.openc2producer.commands.OpenC2Commands;
+
+public class Ejemplo {
+    public static void main(String[] args)
+            throws IOException, InterruptedException {
+        // 1. Configuramos dónde está el Consumer.
+        ConsumerConnection consumer = new ConsumerConnection();
+        consumer.setIp("192.168.1.50");
+        consumer.setPort(8080);
 
-Aplicación de interfaz web para preparar comandos OpenC2, revisar su contenido y enviarlos a un Consumer.
+        // 2. Preparamos el Producer. Todavía no se envía nada.
+        OpenC2Producer producer = new OpenC2Producer(consumer);
+
+        // 3. Construimos el comando con Lycan.
+        OpenC2Commands commands = new OpenC2Commands();
+        OpenC2Message command = commands.createQueryFeatures();
 
-El proyecto se ejecuta de forma independiente de 'openc2consumer'. La integración actual permite consultar información y validar peticiones de investigación, pero todavía no permite ejecutar investigaciones reales.
+        // 4. Enviamos el comando y recibimos la respuesta.
+        OpenC2Response response = producer.sendCommand(command);
 
-## Resumen del desarrollo
+        // 5. Consultamos la respuesta recibida.
+        if (response == null) {
+            System.out.println("El Consumer no devolvió un cuerpo de respuesta.");
+            return;
+        }
 
-La aplicación está desarrollada en tres partes: la interfaz web, el servidor del Producer y la comunicación con el Consumer.
+        System.out.println("Estado OpenC2: " + response.getStatus());
+        System.out.println("Resultados: " + response.getResults());
+    }
+}
+```
 
-La interfaz está desarrollada con HTML, CSS y JavaScript. Desde ella se selecciona la operación mediante botones o se introducen los datos de una petición 'userlogon'. El servidor Java genera el JSON y lo devuelve para mostrarlo en un panel de vista previa. Esta preparación no envía ninguna petición al Consumer.
+`response` guarda la respuesta recibida del Consumer; no se envía a nadie.
+Mostrar `getResults()` permite inspeccionar los datos, pero todavía no los
+convierte en una lista de capacidades utilizable por la aplicación.
 
-El envío se realiza mediante un botón independiente. A continuación, la interfaz muestra el comando enviado, el estado HTTP del Consumer y el cuerpo de su respuesta.
+El ejemplo declara las excepciones para mantenerlo sencillo. La aplicación que
+integre el Producer debe decidir cómo gestionar un fallo de comunicación o una
+interrupción de la espera.
 
-Para mantener una estructura sencilla, he utilizado 'HttpServer' como servidor HTTP y 'HttpClient' para la comunicación entre aplicaciones. Está incorporado además Lycan 1.0.0, la misma dependencia que utiliza el Consumer, y Jackson para la serialización de los comandos.
+## Configuración de la conexión
 
-Navegador → HttpServer del Producer → construcción del comando con Lycan → HttpClient → Consumer
+`ConsumerConnection` contiene:
 
-Las peticiones al Consumer se realizan desde Java. El navegador únicamente se comunica con el Producer.
+- `ip`: dirección del Consumer, sin `http://`.
+- `port`: puerto en el que escucha, entre 1 y 65535.
+- `commandPath`: ruta HTTP donde recibe comandos; su valor inicial es `/`.
 
-## Funcionalidades actuales
+Si el Consumer recibe en `/command`, se configura antes de crear el Producer:
 
-- Consultar capacidades → Solicita las parejas de acciones y objetivos disponibles mediante features: ["pairs"].
-- Consultar investigaciones → Obtiene el catálogo de huntflows sin filtros. Actualmente el Consumer devuelve la definición de userlogon.
-- Consultar fuentes → Obtiene las fuentes definidas, sin filtros. La respuesta actual es estática y no comprueba equipos ni Velociraptor.
-- Preparar una investigación → Construye una petición userlogon con username y un nivel de vigilancia opcional.
-- Revisar el comando → Muestra el JSON generado antes del envío y actualiza la vista previa al cambiar los argumentos.
-- Consultar la referencia del perfil → Presenta una guía sobre la estructura y la finalidad de los comandos del perfil (Actuator Profile).
+```java
+consumer.setCommandPath("/command");
+OpenC2Producer producer = new OpenC2Producer(consumer);
+```
 
-En 'userlogon', el nombre de usuario es obligatorio. Los niveles admitidos son 'STANDARD', 'SUSPICIOUS' y 'CRITICAL'. Si se omite el nivel, el Consumer utiliza 'STANDARD'.
+Con la IP y el puerto del ejemplo, la dirección resultante sería
+`http://192.168.1.50:8080/command`. La ruta debe coincidir con la del Consumer;
+`/command` es solo un ejemplo.
 
-Una petición válida de investigación devuelve actualmente **HTTP 501**, porque la ejecución no está implementada. La interfaz explica esta situación y no presenta la investigación como realizada. La convención 'nombre=valor' dentro de 'string_args' pertenece a este huntflow; no es una regla general de OpenC2.
+El código actual utiliza HTTP. El Producer copia la dirección al construirse:
+modificar después `consumer` no cambia el destino de ese Producer. Para utilizar
+otra dirección, se crea otro `OpenC2Producer` con la nueva configuración.
 
-## Organización del código
+## Comandos disponibles
 
-Las clases Java se encuentran en 'src/main/java/es/tfg/openc2producer/'.
+Todos estos métodos construyen y devuelven un `OpenC2Message`; ninguno lo envía.
 
-- Main.java → Arranque del servidor y configuración de la dirección y el puerto de escucha.
-- ProducerServer.java → Publicación de los recursos web y atención de las peticiones de la API local.
-- LycanCommands.java → Construcción y serialización de los comandos con Lycan y la extensión local de Threat Hunting.
-- UserlogonCommand.java → Validación de los argumentos de userlogon.
-- OpenC2Producer.java → Validación de la dirección del Consumer y envío de las peticiones HTTP.
+| Clase y método | Comando que prepara |
+| --- | --- |
+| `OpenC2Commands.createQueryFeatures()` | `query features`: consulta versiones, perfiles, parejas acción/target y límite de frecuencia. |
+| `OpenC2Commands.createQueryFeatures(lista)` | Consulta solo las capacidades indicadas mediante `FeatureType` de Lycan. |
+| `OpenC2Commands.createCommand(action, target, args)` | Construye un comando con los objetos Lycan proporcionados. |
+| `ThreatHuntingCommands.createQueryHuntflows()` | `query huntflows` con filtros vacíos. |
+| `ThreatHuntingCommands.createQueryHuntflows(filters)` | `query huntflows` con un `HuntflowSpecifiers` de Lycan. |
+| `ThreatHuntingCommands.createQueryDatasources(name)` | `query datasources` con el nombre indicado. |
+| `ThreatHuntingCommands.createQueryDatasources()` | `query datasources` con una cadena vacía. |
+| `ThreatHuntingCommands.createInvestigate(hunt)` | `investigate hunt` sin argumentos. |
+| `ThreatHuntingCommands.createInvestigate(hunt, huntargs)` | `investigate hunt` con los argumentos dentro de `args.th.huntargs`. |
 
-Los recursos de la interfaz están en 'src/main/resources/web/' y las pruebas en 'src/test/java/'.
+La cadena vacía de `createQueryDatasources()` está admitida por la estructura del
+JADN, pero no debe darse por garantizado que el Consumer la interprete como
+«devolver todos los datasources».
 
-### Uso de Lycan
+### Consultar huntflows y datasources
 
-Se utiliza org.oasis.openc2:lycan:1.0.0 para construir mensajes 'OpenC2Message' con sus acciones y objetivos. Esta versión no contiene clases específicas del perfil Threat Hunting, por lo que se han añadido las extensiones de nuestro Actuator Profile de 'Target' y 'Args' para representar el campo 'th'.
+Los siguientes fragmentos se utilizan dentro de un método, con un `producer`
+ya configurado y gestionando las mismas excepciones que en el ejemplo completo.
 
-Jackson serializa los objetos a JSON. La serialización omite los campos nulos y el argumento 'response_requested' que Lycan añade por defecto, ya que el Consumer actual no lo admite en la petición userlogon.
+```java
+ThreatHuntingCommands commands = new ThreatHuntingCommands();
 
-La vista previa y el envío utilizan los mismos constructores Java. Lycan no valida por sí sola todo el perfil: las reglas del subconjunto implementado se comprueban en el código y en las pruebas.
+OpenC2Message command = commands.createQueryHuntflows();
+OpenC2Response response = producer.sendCommand(command);
+```
 
-## Requisitos
+Para filtrar por ubicación:
 
-Para compilar el proyecto se necesita:
+```java
+HuntflowSpecifiers filters = new HuntflowSpecifiers();
+filters.setPath("/catalogo");
 
-- JDK Java 21.
-- Maven; en mi entorno he utilizado la versión 3.9.12.
-- La biblioteca Lycan 1.0.0 del mismo fork utilizado por el Consumer, instalada en el repositorio Maven local.
+OpenC2Message command = commands.createQueryHuntflows(filters);
+OpenC2Response response = producer.sendCommand(command);
+```
 
-Para ejecutar el JAR ya generado basta con disponer de Java 21. Maven Shade incluye las dependencias y los recursos web en el archivo ejecutable.
+El filtro indica la ubicación y los huntflows situados por debajo de ella.
 
-## Despliegue en Windows con PowerShell
+Para consultar un datasource por nombre:
 
-### 1. Preparar el entorno
+```java
+OpenC2Message command = commands.createQueryDatasources("edr");
+OpenC2Response response = producer.sendCommand(command);
+```
 
-En PowerShell, desde cualquier carpeta, se pueden comprobar las versiones con:
-java -version
-mvn -version
+### Solicitar un hunt con argumentos
 
-Los comandos de compilación y arranque se ejecutan desde la raíz de openc2producer.
+```java
+HuntArgs arguments = new HuntArgs();
+arguments.setStringArgs(List.of("equipo-01"));
 
-### 2. Instalar Lycan si no está disponible
+OpenC2Message command =
+        commands.createInvestigate("/catalogo/mi-hunt", arguments);
+OpenC2Response response = producer.sendCommand(command);
+```
 
-La biblioteca utilizada procede del [fork openc2-lycan-java](https://github.com/tfg-projects-dit-us/openc2-lycan-java). Para reproducir el entorno debe utilizarse la misma revisión del fork que emplea el Consumer.
+El hunt y el argumento son ilustrativos. Debe utilizarse un hunt disponible en
+el Consumer y los argumentos que ese hunt requiera. El Producer actual no
+descubre ni comprueba automáticamente esos requisitos.
 
-Si Lycan 1.0.0 ya está instalada en el repositorio Maven local, este paso no es necesario. 
-Si el repositorio está en otra ubicación, hay que ajustar la ruta al pom.xml de Lycan. 
+Para estos fragmentos se necesitan, según el ejemplo, los siguientes imports:
 
-Esta instalación se realiza al preparar el entorno, no en cada arranque.
+```java
+import java.util.List;
+import org.oasis.openc2.lycan.profiles.th.args.HuntArgs;
+import org.oasis.openc2.lycan.profiles.th.targets.HuntflowSpecifiers;
+import us.dit.ueba.openc2producer.profiles.th.ThreatHuntingCommands;
+```
 
-### 3. Compilar y generar el ejecutable
+`HuntArgs` permite proporcionar los tipos de argumentos representados por Lycan,
+como cadenas, enteros, timeranges y datasources. `ThArgs` y `Args` los colocan
+en los niveles correspondientes del comando.
 
-Desde la raíz de openc2producer:
+El identificador del comando puede establecerse con
+`command.setCommandId(...)`. Si ya se han añadido argumentos TH, los argumentos
+generales pueden modificarse mediante `command.getArgs()` para conservarlos.
 
-mvn package
+## Qué sucede al enviar un comando
 
-El comando ejecuta las pruebas y genera **target/openc2producer.jar**, que incluye las dependencias necesarias. La primera compilación puede necesitar acceso a Internet para descargar dependencias y plugins de Maven.
+`sendCommand(command)` realiza estos pasos:
 
-### 4. Arrancar el Producer
+1. `toJson` comprueba que exista el comando y tenga acción y target, y lo
+   convierte a JSON mediante `JsonFormatter` de Lycan.
+2. `createRequest` prepara una petición HTTP POST con ese JSON.
+3. El cliente HTTP envía la petición y espera la respuesta.
+4. `readResponse` comprueba el código HTTP y lee el cuerpo con Lycan.
+5. Devuelve el objeto `OpenC2Response` a la aplicación.
 
-Desde la misma carpeta:
+Para revisar el JSON sin enviarlo se puede llamar a:
 
-java -jar target/openc2producer.jar
+```java
+String json = producer.toJson(command);
+System.out.println(json);
+```
 
-La aplicación escucha por defecto en **http://localhost:8081**. El proceso permanece activo en la consola y se detiene con **Ctrl+C**.
+No es necesario llamar a `toJson` antes de `sendCommand`.
 
-La interfaz y la preparación de comandos funcionan sin arrancar el Consumer. Para realizar un envío y obtener su respuesta, el Consumer debe estar disponible.
+La petición utiliza UTF-8 y el encabezado
+`Content-Type: application/openc2+json;version=1.0`.
+El límite para establecer la conexión es de 3 segundos y el de la petición es
+de 5 segundos. Son límites de espera del Producer, no límites de ejecución del
+hunt en el Consumer. No se siguen redirecciones ni se realizan reintentos
+automáticos.
 
-### 5. Configurar el Consumer y comprobar el funcionamiento
+## Respuestas y errores
 
-En el navegador, abre **http://localhost:8081** e introduce la dirección del Consumer. El valor inicial es **http://localhost:8080**.
+| Situación | Comportamiento actual |
+| --- | --- |
+| HTTP 200–299 con una respuesta OpenC2 interpretable y con `status` | Devuelve `OpenC2Response`. |
+| HTTP 200–299 sin cuerpo o con cuerpo en blanco | Devuelve `null`. |
+| Otro código HTTP | Lanza `IOException` con el código y el cuerpo recibido. |
+| Cuerpo no interpretable o sin `status` OpenC2 | Comunica un error de lectura mediante `IOException`. |
+| Fallo de conexión o tiempo de espera agotado | Lanza `IOException` o una subclase. |
+| Interrupción de la espera | Propaga `InterruptedException`. |
+| Datos de entrada rechazados por las comprobaciones | Lanza `IllegalArgumentException`. |
 
-Selecciona **Consultar capacidades**, revisa el JSON del panel lateral y pulsa **Enviar al Consumer**. Si el Consumer está disponible y admite la consulta, debe mostrarse su respuesta con estado HTTP 200.
+El código HTTP y el `status` OpenC2 son distintos. Por ejemplo, una respuesta
+HTTP 200 puede contener un `status` OpenC2 501. En ese caso, el método devuelve
+el objeto y la aplicación debe revisar `response.getStatus()`.
 
-El Producer añade /openc2/command a la dirección indicada y envía el comando mediante POST, con el Content-Type application/openc2+json;version=1.0.
+Recibir una respuesta no significa necesariamente que la investigación haya
+terminado correctamente. El Producer todavía no interpreta los estados ni
+gestiona el seguimiento de investigaciones pendientes.
 
-La dirección debe utilizar HTTP o HTTPS, sin rutas, parámetros, fragmentos ni credenciales. Por ejemplo, debe introducirse http://localhost:8080
+## Estado actual y trabajo pendiente
 
-### 6. Ejecutar en otro equipo o acceder desde la red (TODAVÍA NO SE HA PROBADO)
+Ya está implementado:
 
-Para trasladar la aplicación ya compilada, basta con copiar target/openc2producer.jar al equipo de destino, que debe disponer de Java 21. Desde la carpeta donde se haya copiado:
+- Construcción de los comandos anteriores mediante Lycan.
+- Configuración del destino mediante `ConsumerConnection`.
+- Envío HTTP y lectura de la respuesta como `OpenC2Response`.
+- Pruebas de construcción de comandos y de comunicación con un servidor local simulado.
 
-java -jar openc2producer.jar
+Queda pendiente:
 
-El Consumer puede estar en un equipo diferente. En ese caso, se indica su dirección en la interfaz, por ejemplo http://192.168.1.30:8080.
+- Interpretar las capacidades devueltas por `query features`, incluidas las
+  combinaciones de acciones y targets.
+- Extraer los huntflows y datasources recibidos para ponerlos a disposición de
+  la aplicación y permitir seleccionar un huntflow.
+- Interpretar los resultados de `investigate hunt`.
+- Incorporar el actuator, cuyo desarrollo se ha dejado para más adelante.
 
-La dirección se interpreta desde el equipo que ejecuta el Producer: localhost se refiere a ese equipo, aunque el navegador esté en otro ordenador.
+Las comprobaciones actuales son básicas, no una validación completa contra el
+JADN. `createCommand` no verifica todas las parejas acción/target de cada
+perfil, ni se validan los esquemas externos STIX/OCA. El envío HTTP actual no
+supone una implementación completa de una especificación OpenC2 de transferencia.
 
-Para acceder al Producer desde otros equipos, desde la raíz del proyecto ejecuta:
+## Compilación y pruebas
 
-java -jar target/openc2producer.jar 0.0.0.0 8081
+Se necesita Java 21, Maven y la versión ampliada de Lycan con soporte TH,
+disponible para Maven como `org.oasis.openc2:lycan:1.0.0`.
+No basta con que coincida el número de versión: esa dependencia debe incluir
+las clases de `org.oasis.openc2.lycan.profiles.th` utilizadas por el proyecto.
 
-El primer argumento establece la dirección de escucha y el segundo el puerto. Desde otro equipo, la interfaz se abre en http://IP_DEL_PRODUCER:8081. La conectividad de red y el cortafuegos deben permitir el acceso a los puertos utilizados por ambas aplicaciones.
+Desde la carpeta de este Producer:
 
-
-## Tratamiento de las respuestas
-
-He configurado un tiempo de espera de 3 segundos para establecer la conexión y de 5 segundos para la petición. No se siguen redirecciones automáticamente.
-
-La interfaz conserva tanto el estado HTTP como el cuerpo de las respuestas del Consumer, incluidos errores como 400 y 501. Si no se obtiene una respuesta HTTP, muestra **Sin respuesta HTTP** junto con la descripción del error.
-
-Los datos se manejan en UTF-8. Los valores introducidos se validan en Java y el contenido recibido se muestra mediante textContent, sin interpretarlo como HTML.
-
-En la API local, el estado HTTP del Producer y el del Consumer se mantienen separados. Si el Consumer responde, la API devuelve HTTP 200 y transmite su estado real en X-Consumer-Status. El comando generado se incluye en X-OpenC2-Command. Los errores locales no incluyen un estado atribuido al Consumer.
-
-## API local
-
-POST /api/preview → Genera el JSON de la operación seleccionada sin contactar con el Consumer.
-POST /api/capabilities → Envía la consulta de capacidades. 
-POST /api/huntflows → Envía la consulta de investigaciones. 
-POST /api/datasources → Envía la consulta de fuentes. 
-POST /api/investigate → Envía la petición userlogon. 
-GET /perfil → Sirve la página de referencia del perfil. 
-
-
-## Pruebas
-
-Desde la raíz del proyecto, en PowerShell:
-
+```powershell
 mvn test
+```
 
-Se han utilizado servidores HTTP locales simulados para que las pruebas no dependan del Consumer real ni de Velociraptor. Se comprueban los comandos generados, el método y la ruta HTTP, el Content-Type, las respuestas 200/400/501 y los errores de conexión y tiempo de espera.
+Para compilar, ejecutar las pruebas y generar el JAR:
 
-También se verifican los niveles de vigilancia, los caracteres especiales del usuario y los campos inválidos. Las pruebas de vista previa comprueban que preparar un comando no provoca un envío y que el JSON preparado coincide con el que recibe posteriormente el Consumer.
+```powershell
+mvn clean package
+```
 
+El resultado es `target/openc2producer.jar`. Es un JAR para utilizar desde una
+aplicación Java, sin punto de entrada ejecutable ni dependencias incorporadas.
 
-## Estado y trabajo pendiente
+Las pruebas están en `src/test/java/us/dit/ueba/openc2producer/`:
 
-La implementación actual es parcial. Las consultas funcionan sin filtros y la petición userlogon se utiliza únicamente para validación.
+- `CommandCreationTest.java`: comprueba los comandos construidos con Lycan.
+- `OpenC2ProducerTest.java`: comprueba envíos, respuestas y errores usando un
+  servidor local, sin necesitar un Consumer real.
 
-Quedan pendientes la ejecución real de investigaciones en el Consumer, la incorporación de timeranges, datasources... a las peticiones, y el soporte de otros huntflows como userlogout, usersession y usersessionduration.
+Las coordenadas Maven del proyecto son
+`us.dit.ueba:openc2producer:1.0-SNAPSHOT`.
+
+## Referencias
+
+- [Arquitectura OpenC2](https://docs.oasis-open.org/openc2/oc2arch/v1.0/oc2arch-v1.0.html).
+- [Threat Hunting Actuator Profile, CSD02](https://docs.oasis-open.org/openc2/ap-hunt/v1.0/csd02/ap-hunt-v1.0-csd02.html).
+- `ap-hunt-0.7.jadn`, proporcionado como referencia para las estructuras TH.
+  El anexo A del perfil establece la prioridad de ese esquema ante discrepancias.
+
+El proyecto usa la ampliación local de Lycan para representar esas estructuras.
+Los ejemplos de este README describen el comportamiento implementado; no
+certifican conformidad completa del Producer con todas las especificaciones.
